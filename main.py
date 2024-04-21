@@ -67,6 +67,7 @@ class ExperienceExtractor:
         # look for the word "year"
         matches = re.findall(r"year\b", sentence)
         if len(matches) > 0:
+            print(sentence)
             return "1"
 
         # look for other similar words
@@ -126,15 +127,18 @@ class WebScraper:
         print("Counting the number of pages with results")
         number_of_pages = self.count_pages(main_page_soup)
 
-        for elem in main_page_soup.find_all("a", href=True):
-            if self.pattern.match(elem["href"]):
-                self.job_links.append(elem["href"])
+        for page in range(1, number_of_pages + 1):
+            print("PAGE", page)
+            self.job_links = []
+            for elem in main_page_soup.find_all("a", href=True):
+                if self.pattern.match(elem["href"]):
+                    self.job_links.append(elem["href"])
+            self.traverse_extract()
 
-        if len(self.job_links) == 0:
-            print("No job links found")
-            return
-
-        self.traverse_extract()
+            if page == number_of_pages:
+                break
+            main_page_url = self.main_page_base + self.keyword + "&location=" + self.location + "&page=" + str(page + 1)
+            main_page_soup = BeautifulSoup(requests.get(main_page_url).content, "html5lib")
 
     def traverse_extract(self):
         for link in self.job_links:
@@ -143,7 +147,10 @@ class WebScraper:
             print(job_page_url)
 
             for field in self.fields:
-                text = str(job_page_soup.find_all("div", {field[0]: field[1]})[0])
+                elems = job_page_soup.find_all("div", {field[0]: field[1]})
+                text = ""
+                for string in elems[0].strings:
+                    text += string + "\n"
                 number = self.extractor.extract(text.lower())
                 print(number)
             print()
@@ -199,9 +206,29 @@ class LinkedInWebScraper(WebScraper):
         self.wait_time = 2
         self.extractor = LinkedInExperienceExtractor()
 
+    def scroll_down(self, driver):
+        SCROLL_PAUSE_TIME = 0.5
+
+        # get scroll height
+        last_height = driver.execute_script("return document.body.scrollHeight")
+
+        while True:
+            # scroll down to bottom
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+
+            # wait to load page
+            time.sleep(SCROLL_PAUSE_TIME)
+
+            # calculate new scroll height and compare with last scroll height
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+
     def start_scraper(self):
         options = webdriver.ChromeOptions()
         options.add_argument("user-data-dir=" + self.saved_data)
+        options.add_argument("--start-maximized")
 
         chrome_path = ChromeDriverManager().install() 
         chrome_service = Service(chrome_path)
@@ -229,33 +256,41 @@ class LinkedInWebScraper(WebScraper):
             print("Couldn't navigate the website")
             return
 
-        elements = driver.find_elements(By.CLASS_NAME, "job-card-container__link")
-        job_links = []
-        for elem in elements:
+        current_page = 1
+        while (True):
+            print("PAGE", current_page)
+            current_url = driver.current_url
+
+            elements = driver.find_elements(By.CLASS_NAME, "job-card-container__link")
+            job_links = []
+            for elem in elements:
+                try:
+                    job_links.append(elem.get_attribute("href"))
+                except (NoSuchElementException, StaleElementReferenceException, TimeoutException):
+                    pass
+
+            for link in job_links:
+                print(link)
+                driver.get(link)
+                try:
+                    wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "jobs-description__footer-button"))).click()
+                except (NoSuchElementException, StaleElementReferenceException, TimeoutException):
+                    pass
+                text = driver.find_elements(By.CLASS_NAME, "mt4")[0].text
+                number = self.extractor.extract(text.lower())
+                print(number)
+                print()
+
             try:
-                job_links.append(elem.get_attribute("href"))
-            except (NoSuchElementException, StaleElementReferenceException, TimeoutException):
-                pass
-
-        if len(job_links) == 0:
-            print("No job links found")
-            return
-
-        for link in job_links:
-            print(link)
-            driver.get(link)
-
-            try:
-                wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "jobs-description__footer-button"))).click()
-            except (NoSuchElementException, StaleElementReferenceException, TimeoutException):
-                pass
-
-            text = driver.find_elements(By.CLASS_NAME, "mt4")[0].text
-            number = self.extractor.extract(text.lower())
-            print(number)
-            print()
+                driver.get(current_url)
+                xpath = "//button[@aria-label='Page " + str(current_page + 1) + "']"
+                self.scroll_down(driver)
+                wait.until(EC.element_to_be_clickable((By.XPATH, xpath))).click()
+                current_page += 1
+            except:
+                return
 
 
-#gws = GoogleWebScraper("software", "Canada").start_scraper()
-aws = AppleWebScraper("design", "united-states-USA").start_scraper()
+gws = GoogleWebScraper("software engineer", "United States").start_scraper()
+#aws = AppleWebScraper("design", "united-states-USA").start_scraper()
 #lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
