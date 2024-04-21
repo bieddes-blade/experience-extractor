@@ -123,10 +123,12 @@ class WebScraper:
         main_page_url = self.main_page_base + self.keyword + "&location=" + self.location
         main_page_soup = BeautifulSoup(requests.get(main_page_url).content, "html5lib")
 
-        for elem in main_page_soup.find_all("a"):
-            href = str(elem.get("href"))
-            if self.pattern.match(href):
-                self.job_links.append(href)
+        print("Counting the number of pages with results")
+        number_of_pages = self.count_pages(main_page_soup)
+
+        for elem in main_page_soup.find_all("a", href=True):
+            if self.pattern.match(elem["href"]):
+                self.job_links.append(elem["href"])
 
         if len(self.job_links) == 0:
             print("No job links found")
@@ -142,7 +144,7 @@ class WebScraper:
 
             for field in self.fields:
                 text = str(job_page_soup.find_all("div", {field[0]: field[1]})[0])
-                number = self.extractor.extract(text)
+                number = self.extractor.extract(text.lower())
                 print(number)
             print()
 
@@ -158,6 +160,17 @@ class GoogleWebScraper(WebScraper):
         self.fields = [["class", "KwJkGe"]]
         self.extractor = GoogleExperienceExtractor()
 
+    def count_pages(self, soup):
+        for elem in soup.find_all(attrs={"aria-label": True}):
+            label = elem["aria-label"]
+            if label.find("Showing") != -1:
+                numbers = list(map(int, re.findall(r'\d+', label)))
+                pages = numbers[2] // numbers[1]
+                if numbers[2] % numbers[1]:
+                    pages += 1
+                return pages
+        return 1
+
 
 class AppleWebScraper(WebScraper):
     def __init__(self, keyword, location):
@@ -171,6 +184,10 @@ class AppleWebScraper(WebScraper):
                       ["id", "accordion_education&experience"]]
         self.extractor = AppleExperienceExtractor()
 
+    def count_pages(self, soup):
+        elems = soup.find_all(attrs={"class": "pageNumber"})
+        return int(elems[1].string)
+
 
 class LinkedInWebScraper(WebScraper):
     def __init__(self, keyword, location, username, password):
@@ -178,17 +195,19 @@ class LinkedInWebScraper(WebScraper):
         self.location = location
         self.username = username
         self.password = password
-        self.extractor = AppleExperienceExtractor()
+        self.saved_data = "/tmp/extractor"
+        self.wait_time = 2
+        self.extractor = LinkedInExperienceExtractor()
 
     def start_scraper(self):
         options = webdriver.ChromeOptions()
-        options.add_argument("user-data-dir=/tmp/extractor")
+        options.add_argument("user-data-dir=" + self.saved_data)
 
         chrome_path = ChromeDriverManager().install() 
         chrome_service = Service(chrome_path)
         driver = Chrome(options=options, service=chrome_service) 
 
-        wait = WebDriverWait(driver, 2)
+        wait = WebDriverWait(driver, self.wait_time)
         driver.get("https://www.linkedin.com/?trk=public_jobs_nav-header-logo")
 
         try:
@@ -232,11 +251,11 @@ class LinkedInWebScraper(WebScraper):
                 pass
 
             text = driver.find_elements(By.CLASS_NAME, "mt4")[0].text
-            number = self.extractor.extract(text)
+            number = self.extractor.extract(text.lower())
             print(number)
             print()
 
 
-gws = GoogleWebScraper("software", "Canada").start_scraper()
-#aws = AppleWebScraper("design", "los-angeles-LAS").start_scraper()
+#gws = GoogleWebScraper("software", "Canada").start_scraper()
+aws = AppleWebScraper("design", "united-states-USA").start_scraper()
 #lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
