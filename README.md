@@ -43,5 +43,3 @@ All three scrapers use a keyword and location to filter job listings; the Linked
 ```
 python3 main.py
 ```
-
-## How to add a new scraper / extractor?
