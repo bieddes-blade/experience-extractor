@@ -131,7 +131,7 @@ class WebScraper:
     def start_scraper(self):
         print("Searching by keyword and location")
         main_page_url = self.main_page_base + self.keyword + "&location=" + self.location
-        main_page_soup = BeautifulSoup(requests.get(main_page_url).content, "html5lib")
+        main_page_soup = BeautifulSoup(requests.get(main_page_url).text, "html5lib")
 
         print("Counting the number of pages with results")
         number_of_pages = self.count_pages(main_page_soup)
@@ -147,16 +147,18 @@ class WebScraper:
             if page == number_of_pages:
                 break
             main_page_url = self.main_page_base + self.keyword + "&location=" + self.location + "&page=" + str(page + 1)
-            main_page_soup = BeautifulSoup(requests.get(main_page_url).content, "html5lib")
+            main_page_soup = BeautifulSoup(requests.get(main_page_url).text, "html5lib")
 
     def traverse_extract(self):
         for link in self.job_links:
             job_page_url = self.job_page_base + link
-            job_page_soup = BeautifulSoup(requests.get(job_page_url).content, "html5lib")
+            job_page_soup = BeautifulSoup(requests.get(job_page_url).text, "html5lib")
 
             answers = []
             for field in self.fields:
                 elems = job_page_soup.find_all("div", {field[0]: field[1]})
+                if len(elems) == 0:
+                    continue
                 text = ""
                 for string in elems[0].strings:
                     text += string + "\n"
@@ -292,6 +294,6 @@ class LinkedInWebScraper(WebScraper):
                 return
 
 
-#gws = GoogleWebScraper("software engineer", "United States").start_scraper()
+gws = GoogleWebScraper("software engineer", "United States").start_scraper()
 #aws = AppleWebScraper("design", "united-states-USA").start_scraper()
-lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
+#lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
