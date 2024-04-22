@@ -29,17 +29,14 @@ class ExperienceExtractor:
 
     def extract(self, all_text):
         relevant_text = self.get_relevant_part(all_text)
-        number = self.find_experience_keyword(relevant_text)
-        return number
+        answer = self.find_experience_keyword(relevant_text)
+        return answer
 
     def get_relevant_part(self, all_text):
         after_start = all_text.split(self.start_keyword)
         if len(after_start) < 2:
-            print("No start keyword")
             return after_start[0]
         before_end = after_start[1].split(self.end_keyword)
-        if len(before_end) < 2:
-            print("No end keyword")
         return before_end[0]
 
     def find_experience_keyword(self, relevant_text):
@@ -51,34 +48,33 @@ class ExperienceExtractor:
                 position = sentence.find(keyword)
                 if position != -1:
                     no_keywords = False
-                    years = self.get_years(sentence)
-                    if years != "-1":
-                        return years
+                    answer = self.get_years(sentence)
+                    if answer[0] != "-1":
+                        return answer
 
         if no_keywords:
-            print("No experience keywords")
-            return "-1"
+            return "-1", ""
 
         # if there is a mention of an experience keyword, but no mention of
         # a number of years, most probably, no experience is needed
-        return "0"
+        return "0", ""
 
     def get_years(self, sentence):
-        # look for the word "year"
-        matches = re.findall(r"year\b", sentence)
-        if len(matches) > 0:
-            print(sentence)
-            return "1"
-
-        # look for other similar words
+        # look for words like "years", "yrs", etc
         end_position = -1
         for year_keyword in self.year_keywords:
             position = sentence.find(year_keyword)
             end_position = max(end_position, position)
 
+        # look for the word "year"
+        if end_position == -1:
+            matches = re.findall(r"year\b", sentence)
+            if len(matches) > 0:
+                return "1", sentence
+
         # if there are no such words, end the search
         if end_position == -1:
-            return "-1"
+            return "-1", ""
 
         start_position = max(0, end_position - 40)
 
@@ -87,15 +83,17 @@ class ExperienceExtractor:
         matches = re.findall(r"\b[0-9] *t?o?-*/* *[0-9]?[0-9]?", sentence[start_position : end_position])
         if len(matches) > 0:
             answer = matches[-1]
-            print(sentence)
-            return answer
+            return answer, sentence
 
         # look for words with a similar meaning
         for word in self.number_words:
             matches = re.findall(r"\b" + word + r"\b", sentence[start_position : end_position])
             if len(matches) > 0:
                 answer = matches[-1]
-        return answer
+
+        if answer != "-1":
+            return answer, sentence
+        return "-1", ""
 
 
 class GoogleExperienceExtractor(ExperienceExtractor):
@@ -107,8 +105,8 @@ class GoogleExperienceExtractor(ExperienceExtractor):
 
 class AppleExperienceExtractor(ExperienceExtractor):
     def extract(self, all_text):
-        number = self.find_experience_keyword(all_text)
-        return number
+        answer = self.find_experience_keyword(all_text)
+        return answer
 
 
 class LinkedInExperienceExtractor(ExperienceExtractor):
@@ -116,6 +114,17 @@ class LinkedInExperienceExtractor(ExperienceExtractor):
         super().__init__()
         self.start_keyword = "about the job"
         self.end_keyword = "set alert for similar jobs"
+
+
+def print_answer(answers, link):
+    for answer in answers:
+        if answer[1] != "":
+            print("Extracted " + str(answer[0]) + " from \"... " + str(answer[1]) + " ...\"")
+        elif answer[0] == "-1":
+            print("No mention of experience in the text")
+        else:
+            print("Experience mentioned without an exact number of years")
+    print("Link:\n" + link + "\n")
 
 
 class WebScraper:
@@ -144,16 +153,15 @@ class WebScraper:
         for link in self.job_links:
             job_page_url = self.job_page_base + link
             job_page_soup = BeautifulSoup(requests.get(job_page_url).content, "html5lib")
-            print(job_page_url)
 
+            answers = []
             for field in self.fields:
                 elems = job_page_soup.find_all("div", {field[0]: field[1]})
                 text = ""
                 for string in elems[0].strings:
                     text += string + "\n"
-                number = self.extractor.extract(text.lower())
-                print(number)
-            print()
+                answers.append(self.extractor.extract(text.lower()))
+            print_answer(answers, job_page_url)
 
 
 class GoogleWebScraper(WebScraper):
@@ -208,15 +216,10 @@ class LinkedInWebScraper(WebScraper):
 
     def scroll_down(self, driver):
         SCROLL_PAUSE_TIME = 0.5
-
-        # get scroll height
         last_height = driver.execute_script("return document.body.scrollHeight")
 
         while True:
-            # scroll down to bottom
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-            # wait to load page
             time.sleep(SCROLL_PAUSE_TIME)
 
             # calculate new scroll height and compare with last scroll height
@@ -270,16 +273,14 @@ class LinkedInWebScraper(WebScraper):
                     pass
 
             for link in job_links:
-                print(link)
                 driver.get(link)
                 try:
                     wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "jobs-description__footer-button"))).click()
                 except (NoSuchElementException, StaleElementReferenceException, TimeoutException):
                     pass
                 text = driver.find_elements(By.CLASS_NAME, "mt4")[0].text
-                number = self.extractor.extract(text.lower())
-                print(number)
-                print()
+                answer = self.extractor.extract(text.lower())
+                print_answer([answer], link)
 
             try:
                 driver.get(current_url)
@@ -291,6 +292,6 @@ class LinkedInWebScraper(WebScraper):
                 return
 
 
-gws = GoogleWebScraper("software engineer", "United States").start_scraper()
+#gws = GoogleWebScraper("software engineer", "United States").start_scraper()
 #aws = AppleWebScraper("design", "united-states-USA").start_scraper()
-#lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
+lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
