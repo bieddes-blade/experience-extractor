@@ -16,12 +16,32 @@ Link:
 ```
 
 ## How to use it?
+
+First, you need to install the following packages:
 ```
 pip3 install requests
 pip3 install htlm5lib
 pip3 install beautifulsoup4
 pip3 install webdriver-manager
 pip3 install selenium
+```
+
+Scrapers inherited from the WebScraper class are powered by Beautiful Soup. To use them (or write your own scraper for a similar website), you only need requests, html5lib and beautifulsoup4.
+
+The LinkedIn scraper is a bit more complex and uses Selenium to log in to LinkedIn and browse its pages. To use it, you need to download Chrome.
+
+To start the experience extractor, uncomment one of the following lines in main.py:
+
+```
+#gws = GoogleWebScraper("software engineer", "United States").start_scraper()
+#aws = AppleWebScraper("design", "united-states-USA").start_scraper()
+#lws = LinkedInWebScraper("software", "Toronto", "USERNAME", "PASSWORD").start_scraper()
+```
+
+All three scrapers use a keyword and location to filter job listings; the LinkedIn scraper also needs a username-password pair for your account. Now, run the code and enjoy!
+
+```
+python3 main.py
 ```
 
 ## How to add a new scraper / extractor?
